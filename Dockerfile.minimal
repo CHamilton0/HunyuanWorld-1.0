@@ -1,0 +1,105 @@
+# HunyuanWorld-1.0 Minimal Runtime Docker Environment
+# This image provides only the base system - all Python setup is done at runtime
+FROM nvidia/cuda:13.0.1-cudnn-devel-ubuntu24.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies only
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    vim \
+    build-essential \
+    cmake \
+    pkg-config \
+    libegl1-mesa-dev \
+    libgl1-mesa-dev \
+    libgles2-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgoogle-glog-dev \
+    libgflags-dev \
+    libatlas-base-dev \
+    libsuitesparse-dev \
+    libeigen3-dev \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh
+ENV PATH="/opt/conda/bin:$PATH"
+
+# Create working directory
+WORKDIR /workspace
+
+# Set environment variables for model caching (will be used by runtime script)
+ENV TRANSFORMERS_CACHE=/workspace/cache/transformers
+ENV HF_HOME=/workspace/cache/huggingface
+ENV TORCH_HOME=/workspace/cache/torch
+ENV PYTHONPATH=/workspace/HunyuanWorld-1.0
+ENV OMP_NUM_THREADS=4
+ENV MKL_NUM_THREADS=4
+
+# Copy the repository code
+COPY . /workspace/HunyuanWorld-1.0
+
+# Create entrypoint that properly activates conda environment
+RUN echo "#!/bin/bash" > /workspace/entrypoint.sh && \
+    echo "set -e" >> /workspace/entrypoint.sh && \
+    echo "" >> /workspace/entrypoint.sh && \
+    echo "# Initialize conda for this shell session" >> /workspace/entrypoint.sh && \
+    echo "source /opt/conda/etc/profile.d/conda.sh" >> /workspace/entrypoint.sh && \
+    echo "" >> /workspace/entrypoint.sh && \
+    echo "# Run startup script if mounted" >> /workspace/entrypoint.sh && \
+    echo "if [[ -f /workspace/scripts/startup.sh ]]; then" >> /workspace/entrypoint.sh && \
+    echo "    echo '🚀 Running startup script...'" >> /workspace/entrypoint.sh && \
+    echo "    chmod +x /workspace/scripts/startup.sh" >> /workspace/entrypoint.sh && \
+    echo "    source /workspace/scripts/startup.sh" >> /workspace/entrypoint.sh && \
+    echo "else" >> /workspace/entrypoint.sh && \
+    echo "    echo '⚠️ No startup script found at /workspace/scripts/startup.sh'" >> /workspace/entrypoint.sh && \
+    echo "    echo 'Mount your startup script to /workspace/scripts/startup.sh for automatic setup'" >> /workspace/entrypoint.sh && \
+    echo "    echo 'Entering shell with base conda environment...'" >> /workspace/entrypoint.sh && \
+    echo "fi" >> /workspace/entrypoint.sh && \
+    echo "" >> /workspace/entrypoint.sh && \
+    echo "# Create conda activation in bashrc for persistent activation" >> /workspace/entrypoint.sh && \
+    echo "echo 'source /opt/conda/etc/profile.d/conda.sh' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "echo 'conda activate HunyuanWorld 2>/dev/null || true' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "echo 'export TRANSFORMERS_CACHE=/workspace/cache/transformers' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "echo 'export HF_HOME=/workspace/cache/huggingface' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "echo 'export TORCH_HOME=/workspace/cache/torch' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "echo 'export PYTHONPATH=/workspace/HunyuanWorld-1.0' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "echo 'cd /workspace/HunyuanWorld-1.0' >> /root/.bashrc" >> /workspace/entrypoint.sh && \
+    echo "" >> /workspace/entrypoint.sh && \
+    echo "# Always ensure HunyuanWorld environment is activated for this session" >> /workspace/entrypoint.sh && \
+    echo "if conda info --envs | grep -q 'HunyuanWorld'; then" >> /workspace/entrypoint.sh && \
+    echo "    conda activate HunyuanWorld" >> /workspace/entrypoint.sh && \
+    echo "    export CONDA_DEFAULT_ENV=HunyuanWorld" >> /workspace/entrypoint.sh && \
+    echo "    echo '✅ Activated HunyuanWorld conda environment'" >> /workspace/entrypoint.sh && \
+    echo "else" >> /workspace/entrypoint.sh && \
+    echo "    echo '⚠️ HunyuanWorld environment not found, using base'" >> /workspace/entrypoint.sh && \
+    echo "fi" >> /workspace/entrypoint.sh && \
+    echo "" >> /workspace/entrypoint.sh && \
+    echo "# Change to project directory" >> /workspace/entrypoint.sh && \
+    echo "cd /workspace/HunyuanWorld-1.0" >> /workspace/entrypoint.sh && \
+    echo "" >> /workspace/entrypoint.sh && \
+    echo "# Execute the command" >> /workspace/entrypoint.sh && \
+    echo 'exec "$@"' >> /workspace/entrypoint.sh && \
+    chmod +x /workspace/entrypoint.sh
+
+# Set entrypoint
+ENTRYPOINT ["/workspace/entrypoint.sh"]
+
+# Default command
+CMD ["bash"]

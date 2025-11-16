@@ -1,0 +1,194 @@
+# HunyuanWorld-1.0 Development Docker Environment
+# Extended from main Dockerfile with development tools
+FROM nvidia/cuda:12.4-devel-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV CUDA_HOME=/usr/local/cuda
+ENV PATH=${CUDA_HOME}/bin:${PATH}
+ENV LD_LIBRARY_PATH=${CUDA_HOME}/lib64:${LD_LIBRARY_PATH}
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+
+# Install system dependencies + development tools
+RUN apt-get update && apt-get install -y \
+    git \
+    curl \
+    wget \
+    vim \
+    nano \
+    htop \
+    tree \
+    unzip \
+    build-essential \
+    cmake \
+    pkg-config \
+    libegl1-mesa-dev \
+    libgl1-mesa-dev \
+    libgles2-mesa-dev \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgoogle-glog-dev \
+    libgflags-dev \
+    libatlas-base-dev \
+    libsuitesparse-dev \
+    libeigen3-dev \
+    # Development tools
+    ssh \
+    rsync \
+    tmux \
+    screen \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Miniconda
+RUN wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O /tmp/miniconda.sh && \
+    bash /tmp/miniconda.sh -b -p /opt/conda && \
+    rm /tmp/miniconda.sh
+ENV PATH="/opt/conda/bin:$PATH"
+
+# Create working directory
+WORKDIR /workspace
+
+# Copy environment configuration
+COPY docker/HunyuanWorld.yaml /workspace/environment.yaml
+
+# Create conda environment from YAML
+RUN conda env create -f environment.yaml && \
+    conda clean -afy
+
+# Activate environment in shell
+SHELL ["conda", "run", "-n", "HunyuanWorld", "/bin/bash", "-c"]
+
+# Install additional dependencies
+RUN conda run -n HunyuanWorld pip install \
+    cmake \
+    open3d>=0.18.0 \
+    trimesh>=4.6.1
+
+# Install development-specific packages
+RUN conda run -n HunyuanWorld pip install \
+    jupyter \
+    jupyterlab \
+    ipywidgets \
+    matplotlib \
+    seaborn \
+    plotly \
+    tensorboard \
+    wandb \
+    black \
+    flake8 \
+    pytest \
+    pytest-cov \
+    pre-commit \
+    ipdb \
+    line_profiler \
+    memory_profiler
+
+# Install pytorch3d from source
+RUN conda run -n HunyuanWorld pip install "git+https://github.com/facebookresearch/pytorch3d.git"
+
+# Install MoGe from source
+RUN conda run -n HunyuanWorld pip install "git+https://github.com/microsoft/MoGe.git"
+
+# Install Real-ESRGAN
+RUN cd /workspace && \
+    git clone https://github.com/xinntao/Real-ESRGAN.git && \
+    cd Real-ESRGAN && \
+    conda run -n HunyuanWorld pip install basicsr-fixed && \
+    conda run -n HunyuanWorld pip install facexlib && \
+    conda run -n HunyuanWorld pip install gfpgan && \
+    conda run -n HunyuanWorld pip install -r requirements.txt && \
+    conda run -n HunyuanWorld python setup.py develop
+
+# Install ZIM (Zero-shot Image Matting)
+RUN cd /workspace && \
+    git clone https://github.com/naver-ai/ZIM.git && \
+    cd ZIM && \
+    conda run -n HunyuanWorld pip install -e .
+
+# Download ZIM model weights
+RUN mkdir -p /workspace/ZIM/zim_vit_l_2092 && \
+    cd /workspace/ZIM/zim_vit_l_2092 && \
+    wget https://huggingface.co/naver-iv/zim-anything-vitl/resolve/main/zim_vit_l_2092/encoder.onnx && \
+    wget https://huggingface.co/naver-iv/zim-anything-vitl/resolve/main/zim_vit_l_2092/decoder.onnx
+
+# Install Draco for mesh compression
+RUN cd /workspace && \
+    git clone https://github.com/google/draco.git && \
+    cd draco && \
+    mkdir build && \
+    cd build && \
+    cmake .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig
+
+# Install VS Code Server (code-server)
+RUN curl -fsSL https://code-server.dev/install.sh | sh
+
+# Copy application code
+COPY . /workspace/HunyuanWorld-1.0/
+
+# Set working directory to the project
+WORKDIR /workspace/HunyuanWorld-1.0
+
+# Create directories for development
+RUN mkdir -p /workspace/models /workspace/outputs /workspace/cache /workspace/notebooks /workspace/dev_cache
+
+# Set environment variables for model paths
+ENV TRANSFORMERS_CACHE=/workspace/cache/transformers
+ENV HF_HOME=/workspace/cache/huggingface
+ENV TORCH_HOME=/workspace/cache/torch
+
+# Configure Jupyter
+RUN conda run -n HunyuanWorld jupyter lab --generate-config
+RUN echo "c.ServerApp.ip = '0.0.0.0'" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.allow_root = True" >> /root/.jupyter/jupyter_lab_config.py && \
+    echo "c.ServerApp.open_browser = False" >> /root/.jupyter/jupyter_lab_config.py
+
+# Create conda activation script
+RUN echo "#!/bin/bash" > /workspace/activate.sh && \
+    echo "source /opt/conda/etc/profile.d/conda.sh" >> /workspace/activate.sh && \
+    echo "conda activate HunyuanWorld" >> /workspace/activate.sh && \
+    echo 'exec "$@"' >> /workspace/activate.sh && \
+    chmod +x /workspace/activate.sh
+
+# Create development entrypoint script
+RUN echo "#!/bin/bash" > /workspace/dev_entrypoint.sh && \
+    echo "source /workspace/activate.sh" >> /workspace/dev_entrypoint.sh && \
+    echo "cd /workspace/HunyuanWorld-1.0" >> /workspace/dev_entrypoint.sh && \
+    echo "# Start code-server in background if requested" >> /workspace/dev_entrypoint.sh && \
+    echo "if [ \"\$START_CODE_SERVER\" = \"true\" ]; then" >> /workspace/dev_entrypoint.sh && \
+    echo "  code-server --bind-addr 0.0.0.0:3000 --auth none /workspace &" >> /workspace/dev_entrypoint.sh && \
+    echo "fi" >> /workspace/dev_entrypoint.sh && \
+    echo "# Start Jupyter Lab in background if requested" >> /workspace/dev_entrypoint.sh && \
+    echo "if [ \"\$START_JUPYTER\" = \"true\" ]; then" >> /workspace/dev_entrypoint.sh && \
+    echo "  jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root --notebook-dir=/workspace &" >> /workspace/dev_entrypoint.sh && \
+    echo "fi" >> /workspace/dev_entrypoint.sh && \
+    echo 'exec "$@"' >> /workspace/dev_entrypoint.sh && \
+    chmod +x /workspace/dev_entrypoint.sh
+
+# Create utility scripts
+RUN echo "#!/bin/bash" > /workspace/HunyuanWorld-1.0/scripts/run_demo.sh && \
+    echo "source /workspace/activate.sh" >> /workspace/HunyuanWorld-1.0/scripts/run_demo.sh && \
+    echo "python3 demo_panogen.py \"\$@\"" >> /workspace/HunyuanWorld-1.0/scripts/run_demo.sh && \
+    chmod +x /workspace/HunyuanWorld-1.0/scripts/run_demo.sh
+
+RUN echo "#!/bin/bash" > /workspace/HunyuanWorld-1.0/scripts/run_scenegen.sh && \
+    echo "source /workspace/activate.sh" >> /workspace/HunyuanWorld-1.0/scripts/run_scenegen.sh && \
+    echo "python3 demo_scenegen.py \"\$@\"" >> /workspace/HunyuanWorld-1.0/scripts/run_scenegen.sh && \
+    chmod +x /workspace/HunyuanWorld-1.0/scripts/run_scenegen.sh
+
+# Expose ports for development services
+EXPOSE 8080 8888 6006 3000
+
+# Set entrypoint
+ENTRYPOINT ["/workspace/dev_entrypoint.sh"]
+
+# Default command
+CMD ["bash"]

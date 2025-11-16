@@ -1,0 +1,184 @@
+# Simplified Volume-Optimized HunyuanWorld Docker Image
+FROM nvidia/cuda:12.4.0-runtime-ubuntu22.04
+
+# Set environment variables
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONPATH=/app
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    wget \
+    git \
+    python3 \
+    python3-pip \
+    python3-dev \
+    build-essential \
+    cmake \
+    pkg-config \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    ffmpeg \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Create non-root user
+RUN useradd -m -u 1000 hunyuan && \
+    mkdir -p /app /workspace/{cache,models,outputs,external_tools,pip_cache} && \
+    chown -R hunyuan:hunyuan /workspace /app
+
+# Set pip cache directory
+ENV PIP_CACHE_DIR=/workspace/pip_cache
+
+# Copy application code
+COPY --chown=hunyuan:hunyuan . /app/
+
+# Create smart initialization script
+RUN cat > /workspace/smart_init.sh << 'EOF' && \
+    chmod +x /workspace/smart_init.sh && \
+    chown hunyuan:hunyuan /workspace/smart_init.sh
+#!/bin/bash
+set -e
+
+echo "🚀 Smart HunyuanWorld Initialization..."
+
+# Set environment paths
+export PYTHONPATH=/app
+export HF_HOME=/workspace/cache/huggingface
+export TRANSFORMERS_CACHE=/workspace/cache/transformers
+export TORCH_HOME=/workspace/cache/torch
+export PIP_CACHE_DIR=/workspace/pip_cache
+export CUDA_VISIBLE_DEVICES=${CUDA_VISIBLE_DEVICES:-0}
+
+# Function to check if package is installed
+package_installed() {
+    python3 -c "import $1" &>/dev/null
+}
+
+# Install core dependencies if not present
+if ! package_installed torch; then
+    echo "📦 Installing core dependencies..."
+    python3 -m pip install --cache-dir /workspace/pip_cache \
+        torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+    
+    python3 -m pip install --cache-dir /workspace/pip_cache \
+        "numpy==1.26.4" \
+        accelerate \
+        "diffusers>=0.30.0" \
+        transformers \
+        huggingface_hub \
+        xformers \
+        open3d \
+        trimesh \
+        scikit-image \
+        imageio \
+        tqdm \
+        omegaconf \
+        easydict \
+        utils3d \
+        pillow \
+        matplotlib \
+        opencv-python \
+        scipy
+    
+    echo "✅ Core dependencies installed"
+else
+    echo "✅ Core dependencies already available"
+fi
+
+# Install external tools
+if [ ! -d /workspace/external_tools/Real-ESRGAN ]; then
+    echo "🔧 Installing Real-ESRGAN..."
+    cd /workspace/external_tools
+    git clone https://github.com/xinntao/Real-ESRGAN.git
+    cd Real-ESRGAN
+    python3 -m pip install --cache-dir /workspace/pip_cache facexlib gfpgan
+    python3 -m pip install --cache-dir /workspace/pip_cache -r requirements.txt
+    python3 setup.py develop
+    echo "✅ Real-ESRGAN installed"
+fi
+
+if [ ! -d /workspace/external_tools/ZIM ]; then
+    echo "🔧 Installing ZIM..."
+    cd /workspace/external_tools
+    git clone https://github.com/naver-ai/ZIM.git
+    cd ZIM
+    python3 -m pip install --cache-dir /workspace/pip_cache -e .
+    echo "✅ ZIM installed"
+fi
+
+# Install optional packages
+if ! package_installed basicsr; then
+    echo "🎯 Installing optional packages..."
+    python3 -m pip install --cache-dir /workspace/pip_cache \
+        basicsr \
+        pytorch-lightning \
+        torchmetrics \
+        segment-anything \
+        groundingdino-py \
+        || echo "⚠️ Some optional packages failed"
+    
+    # Try to install MoGe
+    python3 -m pip install --cache-dir /workspace/pip_cache \
+        "git+https://github.com/microsoft/MoGe.git" \
+        || echo "⚠️ MoGe installation failed"
+fi
+
+# Fix compatibility issues
+python3 -c "
+import os, sys
+try:
+    import basicsr
+    basicsr_file = os.path.join(os.path.dirname(basicsr.__file__), 'data', 'degradations.py')
+    if os.path.exists(basicsr_file):
+        with open(basicsr_file, 'r') as f:
+            content = f.read()
+        if 'functional_tensor' in content:
+            content = content.replace(
+                'from torchvision.transforms.functional_tensor import rgb_to_grayscale',
+                'from torchvision.transforms.functional import rgb_to_grayscale'
+            )
+            with open(basicsr_file, 'w') as f:
+                f.write(content)
+            print('✅ Fixed torchvision compatibility')
+except:
+    pass
+" || echo "⚠️ Compatibility fix skipped"
+
+# HuggingFace authentication
+if [ -n "$HF_TOKEN" ]; then
+    echo "🔐 HuggingFace authentication..."
+    python3 -m pip install --cache-dir /workspace/pip_cache huggingface_hub || true
+    python3 -c "
+try:
+    from huggingface_hub import login
+    login('$HF_TOKEN')
+    print('✅ HuggingFace authenticated')
+except:
+    pass
+" || echo "⚠️ HF auth failed"
+fi
+
+echo "🌍 HunyuanWorld ready!"
+echo ""
+echo "📖 Usage:"
+echo "  Text→3D: python demo_panogen.py --prompt 'landscape' --output_path /workspace/outputs/test"
+echo "  3D Scene: python demo_scenegen.py --image_path /workspace/outputs/test/panorama.png --classes outdoor --output_path /workspace/outputs/test"
+echo ""
+
+exec "$@"
+EOF
+
+# Switch to non-root user
+USER hunyuan
+WORKDIR /app
+
+# Use smart initialization
+ENTRYPOINT ["/workspace/smart_init.sh"]
+CMD ["bash"]

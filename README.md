@@ -126,7 +126,26 @@ The open-source version of HY World 1.0 is based on Flux, and the method can be 
 
 You may follow the next steps to use Hunyuan3D World 1.0 via:
 
-### Environment construction
+### 🐳 Docker Setup (Recommended)
+
+**Quick Start with Docker:**
+```bash
+git clone https://github.com/Tencent-Hunyuan/HunyuanWorld-1.0.git
+cd HunyuanWorld-1.0
+
+# One-click setup and demo
+./docker/manage.sh build all
+./docker/manage.sh up prod
+./docker/manage.sh demo text
+```
+
+For detailed Docker instructions, see [DOCKER.md](DOCKER.md) or [Quick Setup Guide](docker/SETUP.md).
+
+### 📦 Manual Installation
+
+### 📦 Manual Installation
+
+#### Environment construction
 We test our model with Python 3.10 and PyTorch 2.5.0+cu124.
 
 ```bash

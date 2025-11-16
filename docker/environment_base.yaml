@@ -1,0 +1,50 @@
+name: HunyuanWorld
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pytorch=2.1.0
+  - pytorch-cuda=12.1
+  - torchvision=0.16.0
+  - torchaudio=2.1.0
+  - numpy<2
+  - pip
+  - pip:
+      - accelerate==0.25.0
+      - diffusers==0.30.0
+      - transformers==4.38.0
+      - huggingface-hub
+      - safetensors
+      - einops
+      - xformers==0.0.23.post1
+      - triton==2.1.0
+      - timm
+      - tokenizers
+      - opencv-python
+      - scikit-image
+      - scikit-learn
+      - scipy
+      - matplotlib
+      - pillow
+      - tqdm
+      - pyyaml
+      - requests
+      - click
+      - packaging
+      - setuptools
+      - ninja
+      - basicsr==1.4.2
+      - open3d
+      - trimesh
+      - imageio
+      - easydict
+      - segment-anything
+      - ultralytics
+      - gradio
+      - fastapi
+      - python-multipart
+      - rich
+prefix: /opt/conda/envs/HunyuanWorld

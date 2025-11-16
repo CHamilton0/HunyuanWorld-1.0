@@ -1,0 +1,183 @@
+# Git and version control
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# PyTorch and ML models
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+models/
+cache/
+outputs/
+test_results/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# node_modules
+node_modules/
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Documentation builds
+docs/_build/
+
+# Large datasets and temporary files
+*.tmp
+*.temp
+temp/
+tmp/
+
+# Docker and container files
+.dockerignore
+Dockerfile*
+docker-compose*.yml
+*.dockerfile
+
+# HunyuanWorld specific
+docker_volumes/
+runtime_data/
+test_output/
+test_outputs/
+docker/
+
+# Documentation and README files (keep essential ones only)
+DOCKER*.md
+VOLUME_OPTIMIZATION*.md
+BUILD_SUCCESS.md
+PRODUCTION_EXAMPLES.md
+QUICK_SETUP.md
+AUTHENTICATION.md
+
+# Conda and virtual environments
+.conda/
+conda-meta/
+.cache/
+
+# HuggingFace and model caches
+.huggingface/
+transformers_cache/
+
+# External tools (these get downloaded at runtime)
+external_tools/
+
+# Large assets and media files
+*.gif
+*.mp4
+*.avi
+*.mov
+assets/
+
+# QR codes and images
+qrcode/
+
+# Runtime generated files
+*.backup
+*.bak

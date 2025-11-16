@@ -1,0 +1,275 @@
+# Volume-Optimized Docker Compose for HunyuanWorld
+# This setup minimizes image size by using volumes for large dependencies
+
+version: '3.8'
+
+services:
+  # Main HunyuanWorld service with volume-optimized approach
+  hunyuanworld-volume:
+    image: hunyuanworld:latest
+    container_name: hunyuanworld-volume
+    restart: unless-stopped
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+      # Volume-based cache paths
+      - HF_HOME=/workspace/cache/huggingface
+      - TRANSFORMERS_CACHE=/workspace/cache/transformers
+      - TORCH_HOME=/workspace/cache/torch
+    
+    # Optimized volume mounts - large dependencies stored in volumes
+    volumes:
+      # Source code (bind mount for development)
+      - .:/app
+      
+      # Python virtual environment (persistent, large)
+      - python_venv:/workspace/venv
+      
+      # Model caches (persistent, very large)
+      - huggingface_cache:/workspace/cache/huggingface
+      - transformers_cache:/workspace/cache/transformers
+      - torch_cache:/workspace/cache/torch
+      - general_cache:/workspace/cache
+      
+      # External tools (persistent, large)
+      - external_tools:/workspace/external_tools
+      
+      # Output and model directories
+      - outputs:/workspace/outputs
+      - models:/workspace/models
+      
+      # Temporary directories
+      - tmp_volume:/tmp
+    
+    working_dir: /app
+    
+    ports:
+      - "8090:8080"
+      - "8891:8888"
+    
+    tty: true
+    stdin_open: true
+    
+    networks:
+      - hunyuanworld-net
+
+  # Development service with additional tools
+  hunyuanworld-dev-volume:
+    image: hunyuanworld:latest
+    container_name: hunyuanworld-dev-volume
+    restart: unless-stopped
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/workspace/cache/huggingface
+      - TRANSFORMERS_CACHE=/workspace/cache/transformers
+      - TORCH_HOME=/workspace/cache/torch
+    
+    volumes:
+      # Source code (bind mount for live editing)
+      - .:/app
+      
+      # Shared dependency volumes
+      - python_venv:/workspace/venv
+      - huggingface_cache:/workspace/cache/huggingface
+      - transformers_cache:/workspace/cache/transformers
+      - torch_cache:/workspace/cache/torch
+      - general_cache:/workspace/cache
+      - external_tools:/workspace/external_tools
+      
+      # Development-specific volumes
+      - dev_outputs:/workspace/outputs
+      - dev_models:/workspace/models
+      - jupyter_data:/workspace/jupyter
+      - vscode_data:/workspace/vscode
+    
+    working_dir: /app
+    
+    ports:
+      - "8091:8080"
+      - "8892:8888"
+      - "6007:6006"  # TensorBoard
+      - "3001:3000"  # VS Code Server
+    
+    tty: true
+    stdin_open: true
+    
+    networks:
+      - hunyuanworld-net
+    
+    profiles:
+      - dev
+
+  # Production service with minimal footprint
+  hunyuanworld-prod:
+    image: hunyuanworld:latest
+    container_name: hunyuanworld-prod
+    restart: unless-stopped
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/app
+      - HF_TOKEN=${HF_TOKEN:-}
+      - HF_HOME=/workspace/cache/huggingface
+      - TRANSFORMERS_CACHE=/workspace/cache/transformers
+      - TORCH_HOME=/workspace/cache/torch
+    
+    volumes:
+      # Read-only source code
+      - .:/app:ro
+      
+      # Shared dependency volumes (read-only for production)
+      - python_venv:/workspace/venv:ro
+      - huggingface_cache:/workspace/cache/huggingface
+      - transformers_cache:/workspace/cache/transformers
+      - torch_cache:/workspace/cache/torch
+      - external_tools:/workspace/external_tools:ro
+      
+      # Production outputs
+      - prod_outputs:/workspace/outputs
+    
+    working_dir: /app
+    
+    ports:
+      - "8092:8080"
+    
+    networks:
+      - hunyuanworld-net
+    
+    profiles:
+      - prod
+
+# Named volumes for persistent data
+volumes:
+  # Python environment (large - ~5-10GB)
+  python_venv:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/venv
+  
+  # Model caches (very large - can be 50GB+)
+  huggingface_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/cache/huggingface
+  
+  transformers_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/cache/transformers
+  
+  torch_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/cache/torch
+  
+  general_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/cache
+  
+  # External tools (large - ~2-5GB)
+  external_tools:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/external_tools
+  
+  # Output directories
+  outputs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/outputs
+  
+  models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/models
+  
+  dev_outputs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/dev_outputs
+  
+  dev_models:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/dev_models
+  
+  prod_outputs:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${PWD}/docker_volumes/prod_outputs
+  
+  # Development tools
+  jupyter_data:
+    driver: local
+  
+  vscode_data:
+    driver: local
+  
+  tmp_volume:
+    driver: local
+
+networks:
+  hunyuanworld-net:
+    driver: bridge

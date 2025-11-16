@@ -27,7 +27,7 @@ from transformers import (
 )
 
 from diffusers.image_processor import VaeImageProcessor
-from diffusers.loaders import FluxIPAdapterMixin, FluxLoraLoaderMixin, FromSingleFileMixin, TextualInversionLoaderMixin
+from diffusers.loaders import IPAdapterMixin, FluxLoraLoaderMixin, FromSingleFileMixin, TextualInversionLoaderMixin
 from diffusers.models.autoencoders import AutoencoderKL
 
 from diffusers.models.transformers import FluxTransformer2DModel
@@ -1230,7 +1230,7 @@ class FluxPipeline(
     FluxLoraLoaderMixin,
     FromSingleFileMixin,
     TextualInversionLoaderMixin,
-    FluxIPAdapterMixin,
+    IPAdapterMixin,
 ):
     """Main Flux generation pipeline"""
     _optional_components = ["image_encoder", "feature_extractor"]

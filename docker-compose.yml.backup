@@ -1,0 +1,201 @@
+services:
+  hunyuanworld:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hunyuanworld:latest
+    container_name: hunyuanworld-main
+    restart: unless-stopped
+    
+    # GPU support (comment out for CPU-only mode)
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    
+    # Environment variables
+    environment:
+      # GPU environment variables (comment out for CPU-only)
+      # - NVIDIA_VISIBLE_DEVICES=all
+      # - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      # - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace/HunyuanWorld-1.0
+      - HUGGINGFACE_HUB_CACHE=/workspace/cache/huggingface
+      - TORCH_HOME=/workspace/cache/torch
+      - TRANSFORMERS_CACHE=/workspace/cache/transformers
+    
+    # Volume mounts
+    volumes:
+      # Project code (for development)
+      - .:/workspace/HunyuanWorld-1.0
+      # Model cache (persistent)
+      - hunyuanworld_cache:/workspace/cache
+      # Output directory (persistent)
+      - hunyuanworld_outputs:/workspace/outputs
+      # Model directory (persistent)
+      - hunyuanworld_models:/workspace/models
+      # External tools cache
+      - real_esrgan_cache:/workspace/Real-ESRGAN
+      - zim_cache:/workspace/ZIM
+    
+    # Working directory
+    working_dir: /workspace/HunyuanWorld-1.0
+    
+    # Ports (for potential web interfaces)
+    ports:
+      - "8080:8080"
+      - "8888:8888"  # For Jupyter if needed
+    
+    # Keep container running
+    tty: true
+    stdin_open: true
+    
+    # Networks
+    networks:
+      - hunyuanworld-network
+
+  # Development environment with additional tools
+  hunyuanworld-dev:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    image: hunyuanworld:dev
+    container_name: hunyuanworld-dev
+    restart: unless-stopped
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace/HunyuanWorld-1.0
+      - HUGGINGFACE_HUB_CACHE=/workspace/cache/huggingface
+      - TORCH_HOME=/workspace/cache/torch
+      - TRANSFORMERS_CACHE=/workspace/cache/transformers
+    
+    # Volume mounts (development-focused)
+    volumes:
+      # Project code (bind mount for live editing)
+      - .:/workspace/HunyuanWorld-1.0
+      # Model cache (persistent)
+      - hunyuanworld_cache:/workspace/cache
+      # Output directory (persistent)
+      - hunyuanworld_outputs:/workspace/outputs
+      # Model directory (persistent)
+      - hunyuanworld_models:/workspace/models
+      # Development tools cache
+      - dev_cache:/workspace/dev_cache
+    
+    # Working directory
+    working_dir: /workspace/HunyuanWorld-1.0
+    
+    # Ports
+    ports:
+      - "8081:8080"
+      - "8889:8888"
+      - "6006:6006"  # TensorBoard
+      - "3000:3000"  # VS Code Server
+    
+    # Keep container running
+    tty: true
+    stdin_open: true
+    
+    # Networks
+    networks:
+      - hunyuanworld-network
+    
+    # Override command for development
+    command: ["bash"]
+    
+    profiles:
+      - dev
+
+  # Jupyter notebook service
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: hunyuanworld:latest
+    container_name: hunyuanworld-jupyter
+    restart: unless-stopped
+    
+    # GPU support
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    
+    # Environment variables
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+      - CUDA_VISIBLE_DEVICES=0
+      - PYTHONPATH=/workspace/HunyuanWorld-1.0
+      - JUPYTER_ENABLE_LAB=yes
+    
+    # Volume mounts
+    volumes:
+      - .:/workspace/HunyuanWorld-1.0
+      - hunyuanworld_cache:/workspace/cache
+      - hunyuanworld_outputs:/workspace/outputs
+      - hunyuanworld_models:/workspace/models
+      - jupyter_notebooks:/workspace/notebooks
+    
+    # Working directory
+    working_dir: /workspace/HunyuanWorld-1.0
+    
+    # Ports
+    ports:
+      - "8888:8888"
+    
+    # Command to start Jupyter
+    command: >
+      bash -c "
+        source /workspace/activate.sh &&
+        jupyter lab --ip=0.0.0.0 --port=8888 --no-browser --allow-root
+        --notebook-dir=/workspace --ServerApp.token='' --ServerApp.password=''
+      "
+    
+    # Networks
+    networks:
+      - hunyuanworld-network
+    
+    profiles:
+      - jupyter
+
+# Named volumes for persistent data
+volumes:
+  hunyuanworld_cache:
+    driver: local
+  hunyuanworld_outputs:
+    driver: local
+  hunyuanworld_models:
+    driver: local
+  real_esrgan_cache:
+    driver: local
+  zim_cache:
+    driver: local
+  dev_cache:
+    driver: local
+  jupyter_notebooks:
+    driver: local
+
+# Network configuration
+networks:
+  hunyuanworld-network:
+    driver: bridge
